@@ -3,10 +3,10 @@ import { createToken } from '../middleware/AuthenticateUser.js'
 import { compare, hash } from 'bcrypt'
 
 class Users{
-    fetchUsers(req,res){
+    static fetchUsers(req,res){
         try{
             const strQry = `
-            SELECT user_id, first_name, last_name, department from Users;
+            Select user_id, first_name, last_name, department from Users;
             `
             db.query(strQry, (err, results) => {
                 if(err) throw err 
@@ -21,19 +21,45 @@ class Users{
            })
         }
     }
-    fetchUser(req, res) {
+
+    numberChecker(req) {
+      let num = 0
+      for (let ind = 0; ind < 10; ind++) {
+        for (let index = 0; index < req.params.id.length; index++) {
+          if (req.params.id[index] == ind){
+            num += 1
+          }
+        }
+      
+      }
+
+      if (num === req.params.id.length) return true
+    }
+
+    
+    static fetchUser(req, res) {
         try{
-            const strQry = `
-            Select user_id, first_name, last_name, department from Users
-            where user_id = ${req.params.id}
+
+          
+            if (this.numberChecker(req)) {
+              const strQry = `
+              Select user_id, first_name, last_name, department from Users
+              where user_id = ${req.params.id}
             `
-            db.query(strQry, (err, result) => {
-                if (err) throw new Error(err)
-                    res.json({
-                        status: res.statusCode,
-                        result: result[0]
-                    }) 
-            })
+              db.query(strQry, (err, result) => {
+                  if (err) throw new Error(err)
+                      res.json({
+                          status: res.statusCode,
+                          result: result[0]
+                      }) 
+              })
+
+            } else {
+                return res.json({
+                  status: 400,
+                  msg: 'Invalid user id.'
+                })
+          }  
         } catch (e) {
             res.json({
                 status: 404,
@@ -42,7 +68,7 @@ class Users{
         }
     }
     
-     async registerUser(req, res) {
+     static async registerUser(req, res) {
         try {
           let data = req.body;
           data.user_pass = await hash(data.user_pass, 12)
@@ -60,7 +86,7 @@ class Users{
             if (err) {
               res.json({
                 status: res.statusCode,
-                error: "This email has already been taken",
+                error: err.message,
               });
             } else {
               const token = createToken(user);
@@ -78,13 +104,13 @@ class Users{
         }
       }
     
-    async login(req, res) {
+    static async login(req, res) {
         try {
           const { email_add, user_pass } = req.body;
     
           const strQry = `
-                select *
-                from Monitoring
+                select monitor_id, user_id, email_add, user_pass, concat(first_name, " ", last_name) 'Full Name', department 
+                FROM Monitoring LEFT JOIN Users using(user_id)
                 where email_add = '${email_add}'                  
                 `;
           db.query(strQry, async (err, result) => {
@@ -95,10 +121,9 @@ class Users{
                 msg: "Invalid email. Please provide a valid email or register.",
               })
             } else {
-                const isValidPass = await compare(req.body.user_pass, result[0].user_pass)
-                
-                console.log(isValidPass);
-                
+
+              const isValidPass = await compare(req.body.user_pass, result[0].user_pass)                
+              
               if (isValidPass) {
                 const token = createToken({
                   email_add,
@@ -114,7 +139,6 @@ class Users{
                 res.json({
                   status: 401,
                   msg: "Invalid Password. Please input correct password or register.",
-                  result
                 })
               }
             }
@@ -127,7 +151,7 @@ class Users{
         }
       }
       
-    async updateUser(req,res){
+    static async updateAdmin(req,res){
         try{
             const strQry = `
             Update Monitoring Set ? Where user_id = ${req.params.id};            
@@ -152,31 +176,91 @@ class Users{
         }
     }
 
-    // Logs Functionality 
+    static async updateUser(req,res){
+      try{
+          const strQry = `
+          Update Users Set ? Where user_id = ${req.params.id};            
+          `
+          db.query(strQry,[req.body], (err, result) => {
+              if (err) throw new Error(err)
+                  res.json({
+                      status: res.statusCode,
+                      result
+                  }) 
+          })
+      } catch (e) {
+          res.json({
+              status: 404,
+              msg: 'Failed to update.'
+          })
+      }
+    }
 
-//     addLog(req,res){
-//         try {
-//             const strQry = `
-//                 Insert into logs(user_id) Where user_id = ${req.params.id};
-//             `
+    static deleteUser(req, res) {
+      try {
+        const strQry = `
+        delete from Users where
+        user_id = ${req.params.id} 
+        `
+        db.query(strQry, (err) => {
+          if (err) throw new Error("An error occurred while deleting user. Please try again.")
+            res.json({
+              status: res.statusCode,
+              msg: 'User deleted successfully.'
+            })
+        })
+      } catch (e) {
+        res.json({
+          status: 404,
+          msg: e.message
+        })
+      }
+    }
 
-//             db.query(strQry, (err,result) => {
-//                 if (err) throw new Error(err)
-//                     res.json({
-//                         status: res.statusCode,
-//                         result
-//                     }) 
-//             })
-            
-//         } catch (error) {
-//             if(error){
-//                 res.json({
-//                     status: 404,
-//                     result : `Couldn't find data`
-//                 }) 
-//             }
-//         }
-//     }
+    static deleteAdmin(req, res) {
+      try {
+        const strQry = `
+        delete from Monitoring where
+        monitor_id = ${req.params.id} 
+        `
+        db.query(strQry, (err) => {
+          if (err) throw new Error("An error occurred while deleting user. Please try again.")
+            res.json({
+              status: res.statusCode,
+              msg: 'User deleted successfully.'
+            })
+        })
+      } catch (e) {
+        res.json({
+          status: 404,
+          msg: e.message
+        })
+      }
+    }
+
+    // Monitors
+    static fetchMonitors(req,res){
+      try {
+        const strQry = `
+        SELECT monitor_id, user_id, email_add, user_pass, concat(first_name, " ", last_name) 'Full Name', department 
+        FROM Monitoring LEFT JOIN Users using(user_id) 
+        order by user_id desc;
+        `
+
+        db.query(strQry, (err, result) => {
+          if (err) throw new err
+            res.json({
+              status : res.statusCode,
+              result
+            })
+        })
+      } catch (error) {
+        res.json({
+          status : 404,
+          error
+        })
+      }
+    }
 }
 
   export {
